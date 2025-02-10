@@ -3,7 +3,7 @@ using Microsoft.Extensions.Hosting;
 
 namespace KIlian.IRC;
 
-public class KIlianBackgroundService(IKIlianIrcClient ircClient, IEnumerable<IIrcMessageHandler> messageHandlers) : BackgroundService
+public class KIlianBackgroundService(IKIlianIrcClient ircClient, IEnumerable<IIrcMessageHandler> messageHandlers) : BackgroundService, IHostedLifecycleService
 {
     private readonly IIrcMessageHandler[] _messageHandlers = messageHandlers.ToArray();
 
@@ -44,4 +44,13 @@ public class KIlianBackgroundService(IKIlianIrcClient ircClient, IEnumerable<IIr
             await next(message);
         }
     }
+
+    Task IHostedLifecycleService.StartingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    Task IHostedLifecycleService.StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task StoppingAsync(CancellationToken cancellationToken) =>
+        ircClient.WriteLineAsync("QUIT :ich gehe jetzt in deine mamer nussen", cancellationToken);
+
+    Task IHostedLifecycleService.StoppedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

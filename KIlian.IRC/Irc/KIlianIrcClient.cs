@@ -42,7 +42,7 @@ public class KIlianIrcClient(IPasswordManager passwordManager, IOptions<IrcOptio
         await _writer.WriteLineAsync($"USER {_ircOptions.Name} * 1 :{_ircOptions.Name}");
 
         await _writer.WriteLineAsync($"JOIN {_ircOptions.Channel}");
-
+        
         _ = ReconnectAsync(stoppingToken);
         return;
         
@@ -61,11 +61,6 @@ public class KIlianIrcClient(IPasswordManager passwordManager, IOptions<IrcOptio
 
     public async ValueTask DisposeAsync()
     {
-        if (_client.Connected)
-        {
-            await _writer.WriteLineAsync("QUIT :ich gehe jetzt in deine mamer nussen");
-        }
-        
         _reader.Dispose();
         await _writer.DisposeAsync();
         _client.Dispose();
