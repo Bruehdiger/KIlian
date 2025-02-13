@@ -8,4 +8,6 @@ public class OllamaOptions
     public required string LLMName { get; set; }
 
     public int MaxMessageHistory { get; set; } = 50;
+
+    public int MaxConcurrentRequests { get; set; }
 }

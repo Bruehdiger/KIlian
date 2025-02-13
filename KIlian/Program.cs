@@ -26,7 +26,10 @@ builder.Services.AddSingleton<IOllamaApiClient>(sp =>
     var options = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
     return new OllamaApiClient(options.Host, options.LLMName);
 });
-builder.Services.AddSingleton(sp => new Chat(sp.GetRequiredService<IOllamaApiClient>()));
+// builder.Services.AddSingleton(sp => new Chat(sp.GetRequiredService<IOllamaApiClient>()));
+builder.Services.AddSingleton<KIlianChatService>();
+builder.Services.AddSingleton<IKIlianChatService>(sp => sp.GetRequiredService<KIlianChatService>());
+builder.Services.AddHostedService<KIlianChatService>(sp => sp.GetRequiredService<KIlianChatService>());
 builder.Services.AddHostedService<IrcBackgroundService>();
 builder.Services.AddTransient<IIrcMessageHandler, PingMessageHandler>();
 builder.Services.AddTransient<IIrcMessageHandler, ChatMessageHandler>();
@@ -50,4 +53,4 @@ else
 
 app.UseHttpsRedirection();
 
-app.Run();
+await app.RunAsync();
