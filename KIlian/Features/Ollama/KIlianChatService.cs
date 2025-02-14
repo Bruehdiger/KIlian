@@ -5,7 +5,7 @@ using OllamaSharp.Models.Chat;
 
 namespace KIlian.Features.Ollama;
 
-//This services makes it so that the model gets hit with multiple messages at the same time, because KIlian is part of a group chat/"asynchronous" chats.
+//This service makes it so that the model gets hit with multiple messages at the same time, because KIlian is part of a group chat/"asynchronous" chats.
 //So the situation is kinda cringe, because multiple people can ask multiple questions at the same time.
 //Usually it's a strictly sequential conversation for a chat bot (input -> response -> input -> response).
 //Which is probably the reason, the chat api of OllamaSharp doesn't care about bullshit like parallelism or thread safety.
@@ -23,6 +23,17 @@ public class KIlianChatService(IOllamaApiClient ollama, IOptions<OllamaOptions> 
     private readonly SemaphoreSlim _maxConcurrency = new(ollamaOptions.Value.MaxConcurrentRequests, ollamaOptions.Value.MaxConcurrentRequests);
     
     public IOllamaApiClient Client => ollama;
+
+    public IReadOnlyList<Message> Messages
+    {
+        get
+        {
+            lock (_messages)
+            {
+                return _messages.ToArray();
+            }
+        }
+    }
     
     public Task<string?> ChatAsync(KIlianChatRequest request, CancellationToken cancellationToken = default)
     {
