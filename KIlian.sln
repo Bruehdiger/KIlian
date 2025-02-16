@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CommandLineExtensions", "Co
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KIlian", "KIlian\KIlian.csproj", "{D21E8838-ACDE-4D19-B722-CA23BE0C00FD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KIlian.Dashboard", "KIlian.Dashboard\KIlian.Dashboard.csproj", "{36DBCDC3-43F0-4FF7-8C40-5C826347AEF8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{D21E8838-ACDE-4D19-B722-CA23BE0C00FD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D21E8838-ACDE-4D19-B722-CA23BE0C00FD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D21E8838-ACDE-4D19-B722-CA23BE0C00FD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{36DBCDC3-43F0-4FF7-8C40-5C826347AEF8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{36DBCDC3-43F0-4FF7-8C40-5C826347AEF8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{36DBCDC3-43F0-4FF7-8C40-5C826347AEF8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{36DBCDC3-43F0-4FF7-8C40-5C826347AEF8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

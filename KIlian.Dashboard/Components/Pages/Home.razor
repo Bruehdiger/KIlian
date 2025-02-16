@@ -1,0 +1,96 @@
+﻿@page "/"
+@using KIlian.Dashboard.Features.SignalR
+@using Microsoft.AspNetCore.SignalR.Client
+
+@implements IAsyncDisposable
+
+<PageTitle>Home</PageTitle>
+
+@if (!_isConnected)
+{
+    <p>Es wird versucht, eine Verbindung zu KIlian herzustellen</p>
+}
+
+<h1>IRC Nachrichten</h1>
+
+<ul>
+    @foreach (var (datetime, message) in _messages)
+    {
+        <li><i>@datetime</i> @message</li>
+    }
+</ul>
+
+@code {
+    private volatile bool _isConnected;
+    private HubConnection? _connection;
+    private readonly List<(DateTime, string)> _messages = [];
+    private readonly CancellationTokenSource _cancellationTokenSource = new();
+
+    [Inject]
+    public required IConfiguration Configuration { get; set; }
+
+    protected override Task OnInitializedAsync()
+    {
+        _connection = new HubConnectionBuilder()
+            .WithUrl($"{Configuration["KIlian:Host"]}/dashboard")
+            .WithAutomaticReconnect(new IndefiniteRetryPolicy())
+            .Build();
+
+        _connection.On<string>("ReceiveIrcMessage", message =>
+        {
+            _messages.Add((DateTime.Now, message));
+            InvokeAsync(StateHasChanged);
+        });
+
+        _connection.Reconnecting += _ =>
+        {
+            _isConnected = false;
+
+            InvokeAsync(StateHasChanged);
+
+            return Task.CompletedTask;
+        };
+
+        _connection.Reconnected += _ =>
+        {
+            _isConnected = true;
+            
+            InvokeAsync(StateHasChanged);
+            
+            return Task.CompletedTask;
+        };
+
+        _ = Task.Run(async () =>
+        {
+            while (!_cancellationTokenSource.IsCancellationRequested)
+            {
+                try
+                {
+                    await _connection.StartAsync(_cancellationTokenSource.Token);
+                    _isConnected = true;
+                    _ = InvokeAsync(StateHasChanged);
+                    break;
+                }
+                catch when (_cancellationTokenSource.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch
+                {
+                    await Task.Delay(5000);
+                }
+            }
+        });
+
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_connection is not null)
+        {
+            await _connection.DisposeAsync();
+        }
+        await _cancellationTokenSource.CancelAsync();
+    }
+}

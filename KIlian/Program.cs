@@ -1,3 +1,5 @@
+using KIlian.Features.Configuration;
+using KIlian.Features.Dashboard;
 using KIlian.Features.Irc;
 using KIlian.Features.Irc.Authentication;
 using KIlian.Features.Irc.Messages;
@@ -18,6 +20,9 @@ else
     builder.Configuration.AddUserSecrets<Program>();
 }
 
+builder.Services.AddCors();
+builder.Services.ConfigureOptions<ConfigureCorsOptions>();
+
 builder.Services.AddOptions<IrcOptions>().BindConfiguration("Irc");
 builder.Services.AddOptions<OllamaOptions>().BindConfiguration("Ollama");
 
@@ -26,11 +31,12 @@ builder.Services.AddSingleton<IOllamaApiClient>(sp =>
     var options = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
     return new OllamaApiClient(options.Host, options.LLMName);
 });
-// builder.Services.AddSingleton(sp => new Chat(sp.GetRequiredService<IOllamaApiClient>()));
+
 builder.Services.AddSingleton<KIlianChatService>();
 builder.Services.AddSingleton<IKIlianChatService>(sp => sp.GetRequiredService<KIlianChatService>());
-builder.Services.AddHostedService<KIlianChatService>(sp => sp.GetRequiredService<KIlianChatService>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<KIlianChatService>());
 builder.Services.AddHostedService<IrcBackgroundService>();
+builder.Services.AddTransient<IIrcMessageHandler, IrcMessageNotificationHandler>();
 builder.Services.AddTransient<IIrcMessageHandler, PingMessageHandler>();
 builder.Services.AddTransient<IIrcMessageHandler, ChatMessageHandler>();
 builder.Services.AddSingleton<IIrcClient, IrcClient>();
@@ -52,5 +58,9 @@ else
 }
 
 app.UseHttpsRedirection();
+
+app.UseCors();
+
+app.MapHub<DashboardHub>("/dashboard");
 
 await app.RunAsync();
