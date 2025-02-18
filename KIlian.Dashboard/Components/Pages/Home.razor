@@ -1,8 +1,11 @@
 ﻿@page "/"
 @using KIlian.Dashboard.Features.SignalR
 @using Microsoft.AspNetCore.SignalR.Client
+@using KIlian.Shared.Dashboard
+@using KIlian.Shared.Ollama
 
 @implements IAsyncDisposable
+@implements IDashboardClient
 
 <PageTitle>Home</PageTitle>
 
@@ -11,19 +14,39 @@
     <p>Es wird versucht, eine Verbindung zu KIlian herzustellen</p>
 }
 
-<h1>IRC Nachrichten</h1>
+<div class="row">
+    <div class="col-md-6">
+        <h3>IRC Nachrichten</h3>
 
-<ul>
-    @foreach (var (datetime, message) in _messages)
-    {
-        <li><i>@datetime</i> @message</li>
-    }
-</ul>
+        <ul>
+            @foreach (var (datetime, message) in _messages)
+            {
+                <li><i>@datetime</i> @message</li>
+            }
+        </ul>
+    </div>
+    <div class="col-md-6">
+        <h3>Konversation</h3>
+        
+        <ul>
+            @foreach (var turn in _conversation)
+            {
+                <li>
+                    <i>@turn.Start.ToString("T")</i> @turn.Input
+                    <ul>
+                        <li><i>@turn.End.ToString("T")</i> @turn.Output</li>
+                    </ul>
+                </li>
+            }
+        </ul>
+    </div>
+</div>
 
 @code {
     private volatile bool _isConnected;
     private HubConnection? _connection;
     private readonly List<(DateTime, string)> _messages = [];
+    private List<ConversationTurn> _conversation = [];
     private readonly CancellationTokenSource _cancellationTokenSource = new();
 
     [Inject]
@@ -36,11 +59,8 @@
             .WithAutomaticReconnect(new IndefiniteRetryPolicy())
             .Build();
 
-        _connection.On<string>("ReceiveIrcMessage", message =>
-        {
-            _messages.Add((DateTime.Now, message));
-            InvokeAsync(StateHasChanged);
-        });
+        _connection.On<string>("ReceiveIrcMessage", msg => ReceiveIrcMessage(msg, _cancellationTokenSource.Token));
+        _connection.On<ConversationTurn>("ReceiveConversationTurn", turn => ReceiveConversationTurn(turn, _cancellationTokenSource.Token));
 
         _connection.Reconnecting += _ =>
         {
@@ -68,6 +88,7 @@
                 {
                     await _connection.StartAsync(_cancellationTokenSource.Token);
                     _isConnected = true;
+                    _conversation = await _connection.InvokeAsync<List<ConversationTurn>>("GetCurrentConversation", _cancellationTokenSource.Token);
                     _ = InvokeAsync(StateHasChanged);
                     break;
                 }
@@ -92,5 +113,21 @@
             await _connection.DisposeAsync();
         }
         await _cancellationTokenSource.CancelAsync();
+    }
+
+    public Task ReceiveIrcMessage(string message, CancellationToken cancellationToken = default)
+    {
+        _messages.Add((DateTime.Now, message));
+        _messages.RemoveRange(0, Math.Max(0, _messages.Count - 100));
+        _ = InvokeAsync(StateHasChanged);
+        return Task.CompletedTask;
+    }
+
+    public Task ReceiveConversationTurn(ConversationTurn conversationTurn, CancellationToken cancellationToken = default)
+    {
+        _conversation.Add(conversationTurn);
+        _conversation.RemoveRange(0, Math.Max(0, _messages.Count - 100));
+        _ = InvokeAsync(StateHasChanged);
+        return Task.CompletedTask;
     }
 }

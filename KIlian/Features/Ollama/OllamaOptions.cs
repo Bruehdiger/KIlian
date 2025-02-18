@@ -7,7 +7,7 @@ public class OllamaOptions
     // ReSharper disable once InconsistentNaming
     public required string LLMName { get; set; }
 
-    public int MaxMessageHistory { get; set; } = 50;
+    public int MaxConversationTurns { get; set; }
 
     public int MaxConcurrentRequests { get; set; }
 }
