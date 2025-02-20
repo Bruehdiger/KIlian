@@ -1,5 +1,6 @@
 ﻿@page "/"
 @using KIlian.Dashboard.Features.SignalR
+@using KIlian.Shared.Collections
 @using Microsoft.AspNetCore.SignalR.Client
 @using KIlian.Shared.Dashboard
 @using KIlian.Shared.Ollama
@@ -7,47 +8,63 @@
 @implements IAsyncDisposable
 @implements IDashboardClient
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Übersicht</PageTitle>
 
 @if (!_isConnected)
 {
     <p>Es wird versucht, eine Verbindung zu KIlian herzustellen</p>
 }
 
-<div class="row">
-    <div class="col-md-6">
-        <h3>IRC Nachrichten</h3>
-
-        <ul>
-            @foreach (var (datetime, message) in _messages)
-            {
-                <li><i>@datetime</i> @message</li>
-            }
-        </ul>
-    </div>
-    <div class="col-md-6">
-        <h3>Konversation</h3>
-        
-        <ul>
-            @foreach (var turn in _conversation)
-            {
-                <li>
-                    <i>@turn.Start.ToString("T")</i> @turn.Input
-                    <ul>
-                        <li><i>@turn.End.ToString("T")</i> @turn.Output</li>
-                    </ul>
-                </li>
-            }
-        </ul>
-    </div>
-</div>
+<FluentGrid Spacing="5">
+    <FluentGridItem md="12">
+        <h4>Konversation</h4>
+        <div style="display: table; table-layout: fixed; width: 100%;">
+            <div style="overflow: auto; height: 400px;">
+                <FluentDataGrid @ref="_conversationGrid" MultiLine="true" ItemsProvider="GetDefaultItemsProvider(() => _conversation)" GenerateHeader="GenerateHeaderOption.Sticky" Style="min-width: max-content;">
+                    <PropertyColumn Width="200px" Title="Anfrage um" Property="@(c => c.Start)" Format="dd.MM.yyyy HH:mm:ss" Sortable="true" IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending"></PropertyColumn>
+                    <PropertyColumn Title="Nachricht" Property="@(c => c.Input)" Sortable="false" Style="white-space: preserve;"></PropertyColumn>
+                    <PropertyColumn Width="200px" Title="Antwort um" Property="@(c => c.End)" Format="dd.MM.yyyy HH:mm:ss" Sortable="true"></PropertyColumn>
+                    <PropertyColumn Title="Antwort" Property="@(c => c.Output)" Sortable="false" Style="white-space: preserve;"></PropertyColumn>
+                </FluentDataGrid>
+            </div>
+        </div>
+    </FluentGridItem>
+    
+    <FluentGridItem md="12">
+        <h4>IRC Nachrichten</h4>
+        <div style="display: table; table-layout: fixed; width: 100%;">
+            <div style="overflow: auto; height: 400px;">
+                <FluentDataGrid @ref="_ircMessagesGrid" MultiLine="true" ItemsProvider="GetDefaultItemsProvider(() => _ircMessages)" GenerateHeader="GenerateHeaderOption.Sticky" Style="min-width: max-content;">
+                    <PropertyColumn Width="200px" Title="Empfangen" Property="@(m => m.received)" Sortable="true" IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending"></PropertyColumn>
+                    <PropertyColumn Title="Nachricht" Property="@(m => m.message)" Sortable="false" Style="white-space: preserve;"></PropertyColumn>
+                </FluentDataGrid>
+            </div>
+        </div>
+    </FluentGridItem>
+</FluentGrid>
 
 @code {
+    private FluentDataGrid<(DateTime, string)>? _ircMessagesGrid;
+    private FluentDataGrid<ConversationTurn>? _conversationGrid;
     private volatile bool _isConnected;
     private HubConnection? _connection;
-    private readonly List<(DateTime, string)> _messages = [];
-    private List<ConversationTurn> _conversation = [];
+    private readonly MaxCapacityList<(DateTime received, string message)> _ircMessages = new(100);
+    private MaxCapacityList<ConversationTurn> _conversation = new(10);
     private readonly CancellationTokenSource _cancellationTokenSource = new();
+
+    private static GridItemsProvider<TGridItem> GetDefaultItemsProvider<TGridItem>(Func<IEnumerable<TGridItem>> getItems) => request =>
+    {
+        var items = getItems().ToArray();
+        
+        var requestedItems = items.Skip(request.StartIndex);
+        
+        if (request.Count.HasValue)
+        {
+            requestedItems = requestedItems.Take(request.Count.Value);
+        }
+
+        return ValueTask.FromResult(GridItemsProviderResult.From(request.ApplySorting(requestedItems.AsQueryable()).ToArray(), items.Length));
+    };
 
     [Inject]
     public required IConfiguration Configuration { get; set; }
@@ -62,23 +79,9 @@
         _connection.On<string>("ReceiveIrcMessage", msg => ReceiveIrcMessage(msg, _cancellationTokenSource.Token));
         _connection.On<ConversationTurn>("ReceiveConversationTurn", turn => ReceiveConversationTurn(turn, _cancellationTokenSource.Token));
 
-        _connection.Reconnecting += _ =>
-        {
-            _isConnected = false;
+        _connection.Reconnecting += Reconnecting;
 
-            InvokeAsync(StateHasChanged);
-
-            return Task.CompletedTask;
-        };
-
-        _connection.Reconnected += _ =>
-        {
-            _isConnected = true;
-            
-            InvokeAsync(StateHasChanged);
-            
-            return Task.CompletedTask;
-        };
+        _connection.Reconnected += Reconnected;
 
         _ = Task.Run(async () =>
         {
@@ -88,8 +91,9 @@
                 {
                     await _connection.StartAsync(_cancellationTokenSource.Token);
                     _isConnected = true;
-                    _conversation = await _connection.InvokeAsync<List<ConversationTurn>>("GetCurrentConversation", _cancellationTokenSource.Token);
-                    _ = InvokeAsync(StateHasChanged);
+                    InvokeStateHasChanged();
+                    _conversation = new(100, await _connection.InvokeAsync<List<ConversationTurn>>("GetCurrentConversation", _cancellationTokenSource.Token));
+                    RefreshDataGrid(_conversationGrid);
                     break;
                 }
                 catch when (_cancellationTokenSource.IsCancellationRequested)
@@ -110,24 +114,46 @@
     {
         if (_connection is not null)
         {
+            _connection.Reconnecting -= Reconnecting;
+            _connection.Reconnected -= Reconnected;
             await _connection.DisposeAsync();
         }
         await _cancellationTokenSource.CancelAsync();
     }
 
+    private Task Reconnecting(Exception? exception)
+    {
+        _isConnected = false;
+
+        InvokeStateHasChanged();
+
+        return Task.CompletedTask;
+    }
+
+    private Task Reconnected(string? connectionId)
+    {
+        _isConnected = true;
+
+        InvokeStateHasChanged();
+
+        return Task.CompletedTask;
+    }
+
+    private void InvokeStateHasChanged() => InvokeAsync(StateHasChanged);
+
+    private void RefreshDataGrid<T>(FluentDataGrid<T>? grid) => _ = InvokeAsync(() => grid?.RefreshDataAsync() ?? Task.CompletedTask);
+
     public Task ReceiveIrcMessage(string message, CancellationToken cancellationToken = default)
     {
-        _messages.Add((DateTime.Now, message));
-        _messages.RemoveRange(0, Math.Max(0, _messages.Count - 100));
-        _ = InvokeAsync(StateHasChanged);
+        _ircMessages.Add((DateTime.Now, message));
+        RefreshDataGrid(_ircMessagesGrid);
         return Task.CompletedTask;
     }
 
     public Task ReceiveConversationTurn(ConversationTurn conversationTurn, CancellationToken cancellationToken = default)
     {
         _conversation.Add(conversationTurn);
-        _conversation.RemoveRange(0, Math.Max(0, _messages.Count - 100));
-        _ = InvokeAsync(StateHasChanged);
+        RefreshDataGrid(_conversationGrid);
         return Task.CompletedTask;
     }
 }

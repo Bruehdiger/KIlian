@@ -1,10 +1,14 @@
 using KIlian.Dashboard.Components;
+using Microsoft.FluentUI.AspNetCore.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+builder.Services.AddHttpClient();
+builder.Services.AddFluentUIComponents();
 
 var app = builder.Build();
 
