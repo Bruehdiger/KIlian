@@ -10,4 +10,6 @@ public class OllamaOptions
     public int MaxConversationTurns { get; set; }
 
     public int MaxConcurrentRequests { get; set; }
+
+    public int MaxConcurrencyMillisecondsTimeout { get; set; } = -1;
 }

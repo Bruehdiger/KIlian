@@ -62,4 +62,10 @@ public partial class IrcMessage
     public static IrcMessage Join(params string[] targets) => new("JOIN", string.Join(",", targets));
     
     public static IrcMessage Pong(string target) => new("PONG", target);
+
+    public static IrcMessage Kick(IEnumerable<string> channels, IEnumerable<string> users, string? reason = null) =>
+        new($"KICK {string.Join(',', channels)} {string.Join(',', users)}")
+        {
+            Trailing = reason?.Trim()
+        };
 }

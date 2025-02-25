@@ -19,11 +19,16 @@ namespace KIlian.Features.Ollama;
 //But that would be easy and boring lol.
 public class KIlianChatService(IOllamaApiClient ollama, IOptions<OllamaOptions> ollamaOptions, IHubContext<DashboardHub, IDashboardClient> dashboard) : BackgroundService, IKIlianChatService
 {
+    private record KIlianRequest(
+        TaskCompletionSource<string?> RequestCompletionSource,
+        Message Message,
+        ChatRequest ChatRequest,
+        CancellationToken CancellationToken);
+    
+    private readonly OllamaOptions _ollamaOptions = ollamaOptions.Value;
     private readonly List<(DateTimeOffset start, Message input, DateTimeOffset end, Message output)> _conversation = [];
-    private readonly ConcurrentQueue<(ChatRequest chatReq, Func<ChatRequest, Task<(DateTimeOffset start, Message input, DateTimeOffset end, Message output)?>> requestFunc)> _requests = [];
+    private readonly ConcurrentQueue<KIlianRequest> _requests = [];
     private readonly SemaphoreSlim _requestSignal = new(0);
-    private readonly ConcurrentQueue<Task<(DateTimeOffset start, Message input, DateTimeOffset end, Message output)?>> _responses = [];
-    private readonly SemaphoreSlim _responseSignal = new(0);
     private readonly SemaphoreSlim _maxConcurrency = new(ollamaOptions.Value.MaxConcurrentRequests, ollamaOptions.Value.MaxConcurrentRequests);
     
     public IOllamaApiClient Client => ollama;
@@ -64,100 +69,99 @@ public class KIlianChatService(IOllamaApiClient ollama, IOptions<OllamaOptions> 
         
         var requestCompletionSource = new TaskCompletionSource<string?>();
         
-        _requests.Enqueue((chatRequest, async chatReq =>
-        {
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return null;
-            }
-            
-            try
-            {
-                var messageBuilder = new MessageBuilder();
-                var start = DateTimeOffset.Now;
-                
-                await foreach (var chunk in ollama.ChatAsync(chatReq, cancellationToken))
-                {
-                    if (chunk != null)
-                    {
-                        messageBuilder.Append(chunk);
-                    }
-                }
-            
-                var end = DateTimeOffset.Now;
-                var responseMessage = messageBuilder.ToMessage();
-                requestCompletionSource.SetResult(responseMessage.Content);
-                return string.IsNullOrEmpty(responseMessage.Content) ? null : (start, message, end, responseMessage);
-            }
-            catch (Exception e)
-            {
-                requestCompletionSource.SetException(e);
-                return null;
-            }
-        }));
+        _requests.Enqueue(new(requestCompletionSource, message, chatRequest, cancellationToken));
         
         _requestSignal.Release();
         
         return requestCompletionSource.Task.WaitAsync(cancellationToken);
     }
 
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+    private async Task ProcessRequest(TaskCompletionSource<string?> requestCompletionSource, Message message, ChatRequest chatRequest, CancellationToken cancellationToken)
     {
-        var requestTask = Task.Run(async () =>
+        if (cancellationToken.IsCancellationRequested)
         {
-            while (!stoppingToken.IsCancellationRequested)
+            requestCompletionSource.TrySetCanceled(cancellationToken);
+            return;
+        }
+
+        try
+        {
+            var messageBuilder = new MessageBuilder();
+            var start = DateTimeOffset.Now;
+
+            ChatResponseStream? finalChunk = null;
+            await foreach (var chunk in ollama.ChatAsync(chatRequest, cancellationToken))
             {
-                await _requestSignal.WaitAsync(stoppingToken);
-                
-                if (!_requests.TryDequeue(out var request))
+                if (chunk is null)
                 {
                     continue;
                 }
-            
-                await _maxConcurrency.WaitAsync(stoppingToken);
-            
-                _responses.Enqueue(request.requestFunc(request.chatReq));
-                _responseSignal.Release();
+
+                messageBuilder.Append(chunk);
+                finalChunk = chunk;
             }
-        }, stoppingToken);
 
-        var responseTask = Task.Run(async () =>
-        {
-            while (!stoppingToken.IsCancellationRequested)
+            if (finalChunk is not ChatDoneResponseStream { Done: true })
             {
-                await _responseSignal.WaitAsync(stoppingToken);
-            
-                if (!_responses.TryDequeue(out var response))
-                {
-                    continue;
-                }
+                throw new InvalidOperationException("Invalid final chunk");
+            }
 
-                var conversationTurn = await response.ContinueWith(t => t.IsCompletedSuccessfully ? t.Result : null, stoppingToken);
-                
-                _maxConcurrency.Release();
-                
-                if (!conversationTurn.HasValue)
-                {
-                    continue;
-                }
+            var end = DateTimeOffset.Now;
+            var responseMessage = messageBuilder.ToMessage();
+            requestCompletionSource.SetResult(responseMessage.Content);
 
+            if (!string.IsNullOrEmpty(responseMessage.Content))
+            {
                 lock (_conversation)
                 {
-                    _conversation.Add(conversationTurn.Value);
-                    _conversation.RemoveRange(0, Math.Max(0, _conversation.Count - ollamaOptions.Value.MaxConversationTurns));
-                    _ = dashboard.Clients.All.ReceiveConversationTurn(new(conversationTurn.Value.start, conversationTurn.Value.input.Content!, conversationTurn.Value.end, conversationTurn.Value.output.Content!), stoppingToken);
+                    _conversation.Add((start, message, end, responseMessage));
+                    _conversation.RemoveRange(0,
+                        Math.Max(0, _conversation.Count - _ollamaOptions.MaxConversationTurns));
+                    _ = dashboard.Clients.All.ReceiveConversationTurn(
+                        new(start, message.Content!, end, responseMessage.Content), cancellationToken);
                 }
             }
-        }, stoppingToken);
-        
-        return Task.WhenAll(requestTask, responseTask);
+        }
+        catch (OperationCanceledException)
+        {
+            requestCompletionSource.TrySetCanceled(cancellationToken);
+        }
+        catch (Exception e)
+        {
+            requestCompletionSource.TrySetException(e);
+        }
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            await _requestSignal.WaitAsync(stoppingToken);
+                
+            if (!_requests.TryDequeue(out var request))
+            {
+                continue;
+            }
+
+            if (await _maxConcurrency.WaitAsync(_ollamaOptions.MaxConcurrencyMillisecondsTimeout, stoppingToken))
+            {
+                _ = ProcessRequest(request.RequestCompletionSource,
+                        request.Message,
+                        request.ChatRequest,
+                        CancellationTokenSource.CreateLinkedTokenSource(request.CancellationToken, stoppingToken).Token)
+                    .ContinueWith(_ => _maxConcurrency.Release(), stoppingToken);
+            }
+            else
+            {
+                request.RequestCompletionSource.TrySetException(new TimeoutException());
+            }
+        }
     }
 
     public override void Dispose()
     {
         base.Dispose();
         _requestSignal.Dispose();
-        _responseSignal.Dispose();
         _maxConcurrency.Dispose();
         GC.SuppressFinalize(this);
     }

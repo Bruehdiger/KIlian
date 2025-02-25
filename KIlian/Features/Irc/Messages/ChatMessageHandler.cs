@@ -4,9 +4,8 @@ using Microsoft.Extensions.Options;
 
 namespace KIlian.Features.Irc.Messages;
 
-public class ChatMessageHandler(IKIlianChatService chat, IIrcClient ircClient, IOptions<IrcOptions> ircOptions, IOptions<OllamaOptions> ollamaOptions) : IIrcMessageHandler
+public class ChatMessageHandler(IKIlianChatService chat, IIrcClient ircClient, IOptions<IrcOptions> ircOptions) : IIrcMessageHandler
 {
-    private readonly OllamaOptions _ollamaOptions = ollamaOptions.Value;
     private readonly IrcOptions _ircOptions = ircOptions.Value;
     
     public async Task InvokeAsync(IrcMessage message, CancellationToken cancellationToken)
@@ -27,13 +26,35 @@ public class ChatMessageHandler(IKIlianChatService chat, IIrcClient ircClient, I
                 return;
             }
             
-            //if the model is not running at this time, the first generate request will cause ollama to run it
-            var response = await chat.ChatAsync(new KIlianChatRequest(input), cancellationToken);
+            string? response;
+            try
+            {
+                //if the model is not running at this time, the first generate request will cause ollama to run it
+                response = await chat.ChatAsync(new KIlianChatRequest(input), cancellationToken);
+            }
+            catch (TimeoutException)
+            {
+                response = "Macht euch weg, ihr nervt";
+            }
+            catch (Exception)
+            {
+                response = "Ich hab mich grad übel eingeschissen";
+            }
 
             if (!string.IsNullOrEmpty(response))
             {
-                await ircClient.WriteMessagesAsync(IrcMessage.PrivMsg($">>> {input}", _ircOptions.Channel), cancellationToken);
-                await ircClient.WriteMessagesAsync(IrcMessage.PrivMsg(response, _ircOptions.Channel), cancellationToken);
+                var messages = IrcMessage.PrivMsg(response, _ircOptions.Channel).ToArray();
+
+                if (messages.Length > 10)
+                {
+                    var user = new string(message.Prefix?.TakeWhile(ch => ch != '!').ToArray());
+                    await ircClient.WriteMessageAsync(IrcMessage.Kick([_ircOptions.Channel], [user], "huan"), cancellationToken);
+                }
+                else
+                {
+                    await ircClient.WriteMessagesAsync(IrcMessage.PrivMsg($">>> {input}", _ircOptions.Channel), cancellationToken);
+                    await ircClient.WriteMessagesAsync(messages, cancellationToken);   
+                }
             }
         }
     }
