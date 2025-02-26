@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KIlian.Dashboard", "KIlian.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KIlian.Shared", "KIlian.Shared\KIlian.Shared.csproj", "{45DD5640-F41C-42AC-915D-00E2FA07757D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KIlian.EfCore", "KIlian.EfCore\KIlian.EfCore.csproj", "{DF396337-91BA-4D5B-80E8-C9AB74C5CA59}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +38,9 @@ Global
 		{45DD5640-F41C-42AC-915D-00E2FA07757D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{45DD5640-F41C-42AC-915D-00E2FA07757D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{45DD5640-F41C-42AC-915D-00E2FA07757D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DF396337-91BA-4D5B-80E8-C9AB74C5CA59}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DF396337-91BA-4D5B-80E8-C9AB74C5CA59}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DF396337-91BA-4D5B-80E8-C9AB74C5CA59}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DF396337-91BA-4D5B-80E8-C9AB74C5CA59}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

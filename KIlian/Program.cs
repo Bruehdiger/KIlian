@@ -1,13 +1,30 @@
+using KIlian.EfCore;
 using KIlian.Features.Configuration;
 using KIlian.Features.Dashboard;
 using KIlian.Features.Irc;
 using KIlian.Features.Irc.Authentication;
 using KIlian.Features.Irc.Messages;
 using KIlian.Features.Ollama;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OllamaSharp;
 
 var builder = WebApplication.CreateBuilder(args);
+
+Action<DbContextOptionsBuilder>? optionsAction = null;
+var kilianConnectionString = builder.Configuration.GetConnectionString("KIlian");
+if (!string.IsNullOrEmpty(kilianConnectionString))
+{
+    optionsAction = o => o.UseSqlite(kilianConnectionString);
+}
+
+builder.Services.AddDbContextFactory<KIlianSqliteDbContext>(optionsAction);
+
+if (EF.IsDesignTime)
+{
+    _ = builder.Build();
+    return;
+}
 
 if (!builder.Environment.IsDevelopment())
 {

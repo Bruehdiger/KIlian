@@ -8,10 +8,16 @@
   </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.2" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.2">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
         <PackageReference Include="OllamaSharp" Version="5.0.6" />
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\KIlian.EfCore\KIlian.EfCore.csproj" />
       <ProjectReference Include="..\KIlian.Shared\KIlian.Shared.csproj" />
     </ItemGroup>
 
