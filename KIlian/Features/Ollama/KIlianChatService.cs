@@ -9,14 +9,6 @@ using OllamaSharp.Models.Chat;
 
 namespace KIlian.Features.Ollama;
 
-//This service makes it so that the model gets hit with multiple messages at the same time, because KIlian is part of a group chat/"asynchronous" chats.
-//So the situation is kinda cringe, because multiple people can ask multiple questions at the same time.
-//Usually it's a strictly sequential conversation for a chat bot (input -> response -> input -> response).
-//Which is probably the reason, the chat api of OllamaSharp doesn't care about bullshit like parallelism or thread safety.
-//But I can't stop people from sending messages in IRC during response generation.
-//So now I have this abomination with concurrency limits and shit.
-//The previous option was to sequentially process inputs as they come in one after another.
-//But that would be easy and boring lol.
 public class KIlianChatService(IOllamaApiClient ollama, IOptions<OllamaOptions> ollamaOptions, IHubContext<DashboardHub, IDashboardClient> dashboard) : BackgroundService, IKIlianChatService
 {
     private record KIlianRequest(

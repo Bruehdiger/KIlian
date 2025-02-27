@@ -1,5 +1,6 @@
 using KIlian.EfCore;
 using KIlian.Features.Configuration;
+using KIlian.Features.Configuration.Extensions;
 using KIlian.Features.Dashboard;
 using KIlian.Features.Irc;
 using KIlian.Features.Irc.Authentication;
@@ -11,22 +12,7 @@ using OllamaSharp;
 
 var builder = WebApplication.CreateBuilder(args);
 
-Action<DbContextOptionsBuilder>? optionsAction = null;
-var kilianConnectionString = builder.Configuration.GetConnectionString("KIlian");
-if (!string.IsNullOrEmpty(kilianConnectionString))
-{
-    optionsAction = o => o.UseSqlite(kilianConnectionString);
-}
-
-builder.Services.AddDbContextFactory<KIlianSqliteDbContext>(optionsAction);
-
-if (EF.IsDesignTime)
-{
-    _ = builder.Build();
-    return;
-}
-
-if (!builder.Environment.IsDevelopment())
+if (!builder.Environment.IsDevelopment() && !EF.IsDesignTime)
 {
     var credentialsDirectory = builder.Configuration["CREDENTIALS_DIRECTORY"] ??
                                throw new ApplicationException("Environment variable for credentials is missing");
@@ -35,6 +21,14 @@ if (!builder.Environment.IsDevelopment())
 else
 {
     builder.Configuration.AddUserSecrets<Program>();
+}
+
+builder.Services.AddSqlite();
+
+if (EF.IsDesignTime)
+{
+    _ = builder.Build();
+    return;
 }
 
 builder.Services.AddCors();
@@ -64,6 +58,12 @@ builder.Services.AddTransient<IIrcAuthenticationFacade, IrcAuthenticationFacade>
 builder.Services.AddSignalR();
 
 var app = builder.Build();
+
+await using (var db = await app.Services.GetRequiredService<IDbContextFactory<KIlianSqliteDbContext>>().CreateDbContextAsync())
+{
+    await db.Database.MigrateAsync();
+}
+
 
 if (app.Environment.IsDevelopment())
 {
