@@ -1,4 +1,5 @@
 using KIlian.EfCore;
+using KIlian.EfCore.Entities;
 using KIlian.Features.Configuration;
 using KIlian.Features.Configuration.Extensions;
 using KIlian.Features.Dashboard;
@@ -6,6 +7,8 @@ using KIlian.Features.Irc;
 using KIlian.Features.Irc.Authentication;
 using KIlian.Features.Irc.Messages;
 using KIlian.Features.Ollama;
+using KIlian.Features.Rpc.Conversations;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OllamaSharp;
@@ -56,12 +59,24 @@ builder.Services.AddTransient<IIrcAuthenticationFacade, IrcAuthenticationFacade>
 //TODO: logging LOL
 
 builder.Services.AddSignalR();
+builder.Services.AddGrpc();
 
 var app = builder.Build();
 
 await using (var db = await app.Services.GetRequiredService<IDbContextFactory<KIlianSqliteDbContext>>().CreateDbContextAsync())
 {
     await db.Database.MigrateAsync();
+
+    if (app.Environment.IsDevelopment())
+    {
+        await db.AddRangeAsync(Enumerable.Range(0, 100).Select(i => new Message
+        {
+            Content = i.ToString(),
+            From = (i % 2).ToString(),
+            Created = DateTimeOffset.Now,
+        }));
+        await db.SaveChangesAsync();
+    }
 }
 
 
@@ -79,5 +94,6 @@ app.UseHttpsRedirection();
 app.UseCors();
 
 app.MapHub<DashboardHub>("/dashboard");
+app.MapGrpcService<ConversationService>();
 
 await app.RunAsync();

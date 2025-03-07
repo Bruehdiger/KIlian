@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+option csharp_namespace = "KIlian.Generated.Rpc.Pagination";
+
+package kilian.pagination;
+
+message OffsetBasedPagination {
+  optional int32 offset = 1;
+  optional int32 count = 2;
+}
+
+message Paginated {
+  int32 total_items_count = 1;
+}

@@ -1,12 +1,15 @@
 ﻿@page "/"
 @using KIlian.Dashboard.Features.SignalR
 @using KIlian.Shared.Collections
+@using KIlian.Shared.Configuration.Extensions
 @using Microsoft.AspNetCore.SignalR.Client
 @using KIlian.Shared.Dashboard
 @using KIlian.Shared.Ollama
 
 @implements IAsyncDisposable
 @implements IDashboardClient
+
+@inject IConfiguration Configuration
 
 <PageTitle>Übersicht</PageTitle>
 
@@ -20,7 +23,7 @@
         <h4>Konversation</h4>
         <div style="display: table; table-layout: fixed; width: 100%;">
             <div style="overflow: auto; height: 400px;">
-                <FluentDataGrid @ref="_conversationGrid" MultiLine="true" ItemsProvider="GetDefaultItemsProvider(() => _conversation)" GenerateHeader="GenerateHeaderOption.Sticky" Style="min-width: max-content;">
+                <FluentDataGrid @ref="_conversationGrid" MultiLine="true" ItemsProvider="GetDefaultItemsProvider(() => _conversation)" GenerateHeader="GenerateHeaderOption.Sticky">
                     <PropertyColumn Width="200px" Title="Anfrage um" Property="@(c => c.Start)" Format="dd.MM.yyyy HH:mm:ss" Sortable="true" IsDefaultSortColumn="true" InitialSortDirection="SortDirection.Descending"></PropertyColumn>
                     <PropertyColumn Title="Nachricht" Property="@(c => c.Input)" Sortable="false" Style="white-space: preserve;"></PropertyColumn>
                     <PropertyColumn Width="200px" Title="Antwort um" Property="@(c => c.End)" Format="dd.MM.yyyy HH:mm:ss" Sortable="true"></PropertyColumn>
@@ -66,13 +69,10 @@
         return ValueTask.FromResult(GridItemsProviderResult.From(request.ApplySorting(requestedItems.AsQueryable()).ToArray(), items.Length));
     };
 
-    [Inject]
-    public required IConfiguration Configuration { get; set; }
-
     protected override Task OnInitializedAsync()
     {
         _connection = new HubConnectionBuilder()
-            .WithUrl($"{Configuration["KIlian:Host"]}/dashboard")
+            .WithUrl($"{Configuration.GetRequiredValue("KIlian:Endpoints:Http1")}/dashboard")
             .WithAutomaticReconnect(new IndefiniteRetryPolicy())
             .Build();
 

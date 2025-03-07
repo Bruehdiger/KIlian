@@ -1,0 +1,54 @@
+@page "/conversations"
+@using KIlian.Generated.Rpc.Conversations
+
+@inject Conversation.ConversationClient ConversationClient
+
+<PageTitle>Konversationen</PageTitle>
+
+<FluentGrid Spacing="5">
+    <FluentGridItem md="12">
+        <h4>Rohe Nachrichten</h4>
+        <div style="display: table; table-layout: fixed; width: 100%;">
+            <div style="overflow: auto; height: 400px;">
+                <FluentDataGrid TGridItem="MessageDto" @ref="_messagesGrid" Pagination="_pagination" MultiLine="true" ItemsProvider="GetMessages" GenerateHeader="GenerateHeaderOption.Sticky">
+                    <TemplateColumn Title="Erstellt" Width="200px">
+                        <TimestampColumnContent Timestamp="@context.Created" />
+                    </TemplateColumn>
+                    <PropertyColumn Title="Inhalt" Property="@(m => m.Content)" Style="white-space: preserve;" />
+                    <PropertyColumn Title="Von" Property="@(m => m.From)" Style="min-width: 80px" />
+                </FluentDataGrid>
+            </div>
+        </div>
+    </FluentGridItem>
+</FluentGrid>
+
+<FluentPaginator State="_pagination" />
+
+<button @onclick="async () => await RefreshDataGrid(_messagesGrid)">Aktualisieren</button>
+
+@code {
+    private FluentDataGrid<MessageDto>? _messagesGrid;
+    private readonly PaginationState _pagination = new() { ItemsPerPage = 50 };
+
+    public async ValueTask<GridItemsProviderResult<MessageDto>> GetMessages(GridItemsProviderRequest<MessageDto> request)
+    {
+        var response = await ConversationClient.GetMessagesAsync(new()
+        {
+            Pagination = new()
+            {
+                Count = request.Count ?? 50,
+                Offset = request.StartIndex
+            }
+        });
+        
+        return GridItemsProviderResult.From<MessageDto>(response.Messages, response.Paginated.TotalItemsCount);
+    }
+
+    private async ValueTask RefreshDataGrid<T>(FluentDataGrid<T>? grid)
+    {
+        if (grid is not null)
+        {
+            await grid.RefreshDataAsync();
+        }
+    }
+}

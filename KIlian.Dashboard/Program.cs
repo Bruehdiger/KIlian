@@ -1,4 +1,8 @@
+using Grpc.Core;
+using Grpc.Net.Client;
 using KIlian.Dashboard.Components;
+using KIlian.Generated.Rpc.Conversations;
+using KIlian.Shared.Configuration.Extensions;
 using Microsoft.FluentUI.AspNetCore.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -9,6 +13,14 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddHttpClient();
 builder.Services.AddFluentUIComponents();
+
+builder.Services.AddScoped<ChannelBase>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    return GrpcChannel.ForAddress(config.GetRequiredValue("KIlian:Endpoints:Http2"));
+});
+
+builder.Services.AddScoped<Conversation.ConversationClient>();
 
 var app = builder.Build();
 

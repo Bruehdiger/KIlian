@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+import "pagination.proto";
+
+option csharp_namespace = "KIlian.Generated.Rpc.Conversations";
+
+package kilian.conversations;
+
+service Conversation {
+  rpc GetMessages (OffsetPaginatedMessagesRequest) returns (OffsetPaginatedMessagesResponse);
+}
+
+message OffsetPaginatedMessagesRequest {
+  pagination.OffsetBasedPagination Pagination = 1;
+}
+
+message OffsetPaginatedMessagesResponse {
+  pagination.Paginated Paginated = 1;
+  repeated MessageDto messages = 2;
+}
+
+message MessageDto {
+  int64 id = 1;
+  google.protobuf.Timestamp created = 2;
+  string content = 3;
+  string from = 4;
+}
