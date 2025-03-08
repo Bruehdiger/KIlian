@@ -56,6 +56,7 @@ builder.Services.AddTransient<IIrcMessageHandler, ChatMessageHandler>();
 builder.Services.AddSingleton<IIrcClient, IrcClient>();
 builder.Services.AddTransient<IIrcAuthenticator<PlainSaslCredentials>, PlainSaslIrcAuthenticator>();
 builder.Services.AddTransient<IIrcAuthenticationFacade, IrcAuthenticationFacade>();
+builder.Services.AddHttpClient<IIrcMessageHoster, NullPointerService>(client => client.DefaultRequestHeaders.Add("User-Agent", "KIlian"));
 //TODO: logging LOL
 
 builder.Services.AddSignalR();

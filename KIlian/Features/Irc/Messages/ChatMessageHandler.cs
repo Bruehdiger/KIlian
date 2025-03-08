@@ -12,6 +12,7 @@ public class ChatMessageHandler(
     IKIlianChatService chat,
     IIrcClient ircClient,
     IDbContextFactory<KIlianSqliteDbContext> dbFactory,
+    IIrcMessageHoster hoster,
     IOptions<IrcOptions> ircOptions) : IIrcMessageHandler
 {
     private readonly IrcOptions _ircOptions = ircOptions.Value;
@@ -109,18 +110,38 @@ public class ChatMessageHandler(
                 
             var messages = IrcMessage.PrivMsg(response, _ircOptions.Channel).ToArray();
 
-            if (messages.Length > 10)
+            if (messages.Length > _ircOptions.MessagesThreshold)
             {
-                await ircClient.WriteMessageAsync(IrcMessage.Kick([_ircOptions.Channel], [user], "huan"), cancellationToken);
+                var (token, newResponse) = await hoster.UploadMessage(response, cancellationToken).ContinueWith(
+                    task => task.IsCompletedSuccessfully
+                        ? task.Result
+                        : ("", "Meine Antwort ist zu lang und der FileHoster will sie auch nicht (du Opfer)."),
+                    cancellationToken);
+                messages = IrcMessage.PrivMsg($"{newResponse} {token}".Trim(), _ircOptions.Channel).ToArray();
             }
-            else
-            {
-                await ircClient.WriteMessagesAsync(IrcMessage.PrivMsg($">>> {input}", _ircOptions.Channel), cancellationToken);
-                await ircClient.WriteMessagesAsync(messages, cancellationToken);
-            }
+            
+            await ircClient.WriteMessagesAsync(IrcMessage.PrivMsg($">>> {input}", _ircOptions.Channel), cancellationToken);
+            await ircClient.WriteMessagesAsync(messages, cancellationToken);
         } else if (!string.IsNullOrEmpty(input))
         {
             yield return (input, user);
         }
+    }
+}
+
+public interface IIrcMessageHoster
+{
+    Task<(string token, string link)> UploadMessage(string message, CancellationToken cancellationToken = default);
+}
+
+public class NullPointerService(HttpClient httpClient) : IIrcMessageHoster
+{
+    public async Task<(string, string)> UploadMessage(string message, CancellationToken cancellationToken)
+    {
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(message), "file", $"{Guid.NewGuid()}.txt");
+        using var response = await httpClient.PostAsync("https://0x0.st", content, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return (response.Headers.GetValues("X-Token").FirstOrDefault() ?? "Bruder wo ist mein Token?", (await response.Content.ReadAsStringAsync(cancellationToken)).Trim());
     }
 }

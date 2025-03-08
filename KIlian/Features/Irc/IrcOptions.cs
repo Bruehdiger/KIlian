@@ -13,4 +13,6 @@ public class IrcOptions
     public required string ServerPass { get; set; }
 
     public required string KIlianPassword { get; set; }
+
+    public required int? MessagesThreshold { get; set; }
 }
