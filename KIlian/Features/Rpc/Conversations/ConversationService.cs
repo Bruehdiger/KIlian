@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
@@ -82,32 +83,31 @@ public class ConversationService(IDbContextFactory<KIlianSqliteDbContext> dbFact
     {
         await using var db = await dbFactory.CreateDbContextAsync(context.CancellationToken);
 
-        var totalConversationCount = await db.Set<KIlian.EfCore.Entities.Conversation>().CountAsync(context.CancellationToken);
-
-        IQueryable<KIlian.EfCore.Entities.Conversation> conversationsQuery = db
-            .Set<KIlian.EfCore.Entities.Conversation>()
-            // ReSharper disable once EntityFramework.ClientSideDbFunctionCall
-            .OrderBy(_ => EF.Functions.Random())
-            .Include(c => c.Turns.OrderBy(turn => turn.Order));
+        IQueryable<ConversationTurn> turns = db.Set<ConversationTurn>().OrderBy(turn => turn.ConversationId).ThenBy(turn => turn.Order);
         
         if (request.HasAmountOfConversations)
         {
-            conversationsQuery = conversationsQuery.Take(request.AmountOfConversations);
+            turns = turns.Where(turn => db.Set<KIlian.EfCore.Entities.Conversation>().OrderBy(_ => EF.Functions.Random()).Take(request.AmountOfConversations).Select(c => c.Id).Contains(turn.ConversationId));
         }
-
+        
         var buffer = new ArrayBufferWriter<byte>();
         await using var writer = new Utf8JsonWriter(buffer);
         writer.WriteStartObject();
         writer.WritePropertyName("conversations");
         writer.WriteStartArray();
         
-        foreach (var conversation in conversationsQuery.AsSplitQuery())
+        var serializerOptions = new JsonSerializerOptions
         {
-            writer.WriteRawValue(JsonSerializer.Serialize(conversation.Turns.Select(turn => new
+            Converters = { new JsonStringEnumConverter() }
+        };
+        
+        foreach (var conversationTurns in turns.GroupBy(turn => turn.ConversationId).AsSingleQuery())
+        {
+            writer.WriteRawValue(JsonSerializer.Serialize(conversationTurns.Select(turn => new
             {
                 from = turn.From,
                 content = turn.Content,
-            }).ToArray()));
+            }).ToArray(), serializerOptions));
 
             if (buffer.WrittenCount <= 0)
             {

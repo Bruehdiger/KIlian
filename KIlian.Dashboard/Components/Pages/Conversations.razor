@@ -28,7 +28,10 @@
 
         <CustomFluentPaginator State="_pagination" RefreshDataDelegate="() => _messagesGrid.RefreshAsync()" />
 
-        <FluentButton Disabled="!_selectedMessages.Any()" OnClick="CreateConversation" Style="margin-top: 10px;">Konversation erstellen</FluentButton>
+        <FluentStack Style="justify-content: space-between; margin-top: 10px">
+            <FluentButton Disabled="!_selectedMessages.Any()" OnClick="DeleteMessages">Löschen</FluentButton>
+            <FluentButton Disabled="!_selectedMessages.Any()" OnClick="CreateConversation" Appearance="Appearance.Accent">Konversation erstellen</FluentButton>
+        </FluentStack>
     </FluentGridItem>
     
     <FluentGridItem>
@@ -118,5 +121,28 @@
         using var streamRef = new DotNetStreamReference(underlyingStream);
         
         await Js.InvokeVoidAsync("downloadTrainingData", streamRef);
+    }
+
+    private async Task DeleteMessages()
+    {
+        var dialog = await DialogService.ShowConfirmationAsync("Nachrichten wirklich löschen?", "Ja", "Nein", "Bestätigen");
+        var result = await dialog.Result;
+
+        if (result.Cancelled)
+        {
+            return;
+        }
+        
+        await ConversationClient.DeleteMessagesAsync(new()
+        {
+            MessageIds =
+            {
+                _selectedMessages.Select(message => message.Id)
+            }
+        });
+
+        _selectedMessages = [];
+
+        await _messagesGrid.RefreshAsync();
     }
 }
