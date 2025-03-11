@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
 import "pagination.proto";
 
 option csharp_namespace = "KIlian.Generated.Rpc.Conversations";
@@ -8,14 +9,17 @@ option csharp_namespace = "KIlian.Generated.Rpc.Conversations";
 package kilian.conversations;
 
 service Conversation {
-  rpc GetMessages (OffsetPaginatedMessagesRequest) returns (OffsetPaginatedMessagesResponse);
+  rpc GetMessages (GetOffsetPaginatedMessagesDto) returns (OffsetPaginatedMessagesDto);
+  rpc DeleteMessages (DeleteMessagesDto) returns (google.protobuf.Empty);
+  rpc CreateConversationFromTurns(CreateConversationFromTurnsDto) returns (ConversationDto);
+  rpc GenerateTrainingData(GenerateTrainingDataDto) returns (stream TrainingDataDto);
 }
 
-message OffsetPaginatedMessagesRequest {
+message GetOffsetPaginatedMessagesDto {
   pagination.OffsetBasedPagination Pagination = 1;
 }
 
-message OffsetPaginatedMessagesResponse {
+message OffsetPaginatedMessagesDto {
   pagination.Paginated Paginated = 1;
   repeated MessageDto messages = 2;
 }
@@ -25,4 +29,42 @@ message MessageDto {
   google.protobuf.Timestamp created = 2;
   string content = 3;
   string from = 4;
+}
+
+message DeleteMessagesDto {
+  repeated int64 message_ids = 1;
+}
+
+enum ConversationParticipantDto {
+  User = 0;
+  Assistant = 1;
+}
+
+message CreateConversationFromTurnsDto {
+  repeated CreateConversationTurnDto turns = 1;
+}
+
+message CreateConversationTurnDto {
+  string content = 1;
+  int32 order = 3;
+}
+
+message ConversationTurnDto {
+  int64 id = 1;
+  string content = 2;
+  ConversationParticipantDto from = 3;
+  int32 order = 4;
+}
+
+message ConversationDto {
+  int64 id = 1;
+  repeated ConversationTurnDto turns = 2;
+}
+
+message GenerateTrainingDataDto {
+  optional int32 AmountOfConversations = 1;
+}
+
+message TrainingDataDto {
+  bytes chunk = 1;
 }

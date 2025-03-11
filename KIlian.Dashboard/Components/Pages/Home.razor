@@ -1,4 +1,5 @@
 ﻿@page "/"
+@using KIlian.Dashboard.Features.Components.Extensions
 @using KIlian.Dashboard.Features.SignalR
 @using KIlian.Shared.Collections
 @using KIlian.Shared.Configuration.Extensions
@@ -48,11 +49,11 @@
 
 @code {
     private FluentDataGrid<(DateTime, string)>? _ircMessagesGrid;
-    private FluentDataGrid<ConversationTurn>? _conversationGrid;
-    private volatile bool _isConnected;
+    private FluentDataGrid<KIlianConversationTurn>? _conversationGrid;
+    private bool _isConnected;
     private HubConnection? _connection;
     private readonly MaxCapacityList<(DateTime received, string message)> _ircMessages = new(100);
-    private MaxCapacityList<ConversationTurn> _conversation = new(10);
+    private MaxCapacityList<KIlianConversationTurn> _conversation = new(10);
     private readonly CancellationTokenSource _cancellationTokenSource = new();
 
     private static GridItemsProvider<TGridItem> GetDefaultItemsProvider<TGridItem>(Func<IEnumerable<TGridItem>> getItems) => request =>
@@ -77,7 +78,7 @@
             .Build();
 
         _connection.On<string>("ReceiveIrcMessage", msg => ReceiveIrcMessage(msg, _cancellationTokenSource.Token));
-        _connection.On<ConversationTurn>("ReceiveConversationTurn", turn => ReceiveConversationTurn(turn, _cancellationTokenSource.Token));
+        _connection.On<KIlianConversationTurn>("ReceiveConversationTurn", turn => ReceiveConversationTurn(turn, _cancellationTokenSource.Token));
 
         _connection.Reconnecting += Reconnecting;
 
@@ -92,8 +93,8 @@
                     await _connection.StartAsync(_cancellationTokenSource.Token);
                     _isConnected = true;
                     InvokeStateHasChanged();
-                    _conversation = new(100, await _connection.InvokeAsync<List<ConversationTurn>>("GetCurrentConversation", _cancellationTokenSource.Token));
-                    RefreshDataGrid(_conversationGrid);
+                    _conversation = new(100, await _connection.InvokeAsync<List<KIlianConversationTurn>>("GetCurrentConversation", _cancellationTokenSource.Token));
+                    await _conversationGrid.RefreshAsync();
                     break;
                 }
                 catch when (_cancellationTokenSource.IsCancellationRequested)
@@ -141,19 +142,15 @@
 
     private void InvokeStateHasChanged() => InvokeAsync(StateHasChanged);
 
-    private void RefreshDataGrid<T>(FluentDataGrid<T>? grid) => _ = InvokeAsync(() => grid?.RefreshDataAsync() ?? Task.CompletedTask);
-
-    public Task ReceiveIrcMessage(string message, CancellationToken cancellationToken = default)
+    public async Task ReceiveIrcMessage(string message, CancellationToken cancellationToken = default)
     {
         _ircMessages.Add((DateTime.Now, message));
-        RefreshDataGrid(_ircMessagesGrid);
-        return Task.CompletedTask;
+        await _ircMessagesGrid.RefreshAsync();
     }
 
-    public Task ReceiveConversationTurn(ConversationTurn conversationTurn, CancellationToken cancellationToken = default)
+    public async Task ReceiveConversationTurn(KIlianConversationTurn conversationTurn, CancellationToken cancellationToken = default)
     {
         _conversation.Add(conversationTurn);
-        RefreshDataGrid(_conversationGrid);
-        return Task.CompletedTask;
+        await _conversationGrid.RefreshAsync();
     }
 }

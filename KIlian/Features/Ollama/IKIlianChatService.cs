@@ -9,5 +9,5 @@ public interface IKIlianChatService
     
     Task<string?> ChatAsync(KIlianChatRequest request, CancellationToken cancellationToken = default);
     
-    IReadOnlyList<ConversationTurn> Conversation { get; }
+    IReadOnlyList<KIlianConversationTurn> Conversation { get; }
 }

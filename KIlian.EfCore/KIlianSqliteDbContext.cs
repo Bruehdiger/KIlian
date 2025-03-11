@@ -20,6 +20,10 @@ public class KIlianSqliteDbContext(DbContextOptions<KIlianSqliteDbContext> optio
         modelBuilder.Entity<ConversationTurn>(turnBuilder =>
         {
             turnBuilder.HasIndex(turn => new { turn.ConversationId, turn.Order }).IsUnique();
+
+            turnBuilder.Property(turn => turn.From).HasConversion<EnumToStringConverter<ConversationParticipant>>();
+
+            turnBuilder.HasIndex(turn => turn.From);
         });
 
         modelBuilder.Entity<Log>(logBuilder =>

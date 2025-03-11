@@ -1,0 +1,36 @@
+@inherits FluentPaginator
+
+@{
+    base.BuildRenderTree(__builder);
+}
+
+<FluentGrid>
+    <FluentGridItem Justify="JustifyContent.FlexStart" md="6">
+        @if (RefreshDataDelegate is not null)
+        {
+            <FluentButton OnClick="RefreshDataDelegate">Aktualisieren</FluentButton>
+        }
+    </FluentGridItem>
+    <FluentGridItem Justify="JustifyContent.FlexEnd" md="6">
+        <FluentSelect TOption="int"
+                      Items="PageSizes"
+                      SelectedOption="State.ItemsPerPage"
+                      SelectedOptionChanged="async option => await State.SetItemsPerPageAsync(option)">
+            <OptionTemplate>
+                @context Elemente pro Seite
+            </OptionTemplate>
+        </FluentSelect>
+    </FluentGridItem>
+</FluentGrid>
+
+@code {
+    [Parameter] public int[] PageSizes { get; set; } = [10, 20, 50, 100];
+
+    [Parameter]
+    public Func<Task>? RefreshDataDelegate { get; set; }
+
+    public CustomFluentPaginator()
+    {
+        SummaryTemplate = @<span><strong>@State.TotalItemCount</strong> Elemente</span>;
+    }
+}

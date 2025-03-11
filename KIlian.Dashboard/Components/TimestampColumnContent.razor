@@ -1,8 +1,0 @@
-@using Google.Protobuf.WellKnownTypes
-
-@Timestamp.ToDateTimeOffset().ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss")
-
-@code {
-    [Parameter]
-    public required Timestamp Timestamp { get; set; }
-}

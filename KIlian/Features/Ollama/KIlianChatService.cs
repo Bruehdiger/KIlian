@@ -25,13 +25,13 @@ public class KIlianChatService(IOllamaApiClient ollama, IOptions<OllamaOptions> 
     
     public IOllamaApiClient Client => ollama;
 
-    public IReadOnlyList<ConversationTurn> Conversation
+    public IReadOnlyList<KIlianConversationTurn> Conversation
     {
         get
         {
             lock (_conversation)
             {
-                return _conversation.Select(c => new ConversationTurn(c.start, c.input.Content!, c.end, c.output.Content!)).ToArray();
+                return _conversation.Select(c => new KIlianConversationTurn(c.start, c.input.Content!, c.end, c.output.Content!)).ToArray();
             }
         }
     }

@@ -3,6 +3,7 @@ using System;
 using KIlian.EfCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace KIlian.EfCore.Migrations.Sqlite
 {
     [DbContext(typeof(KIlianSqliteDbContext))]
-    partial class KIlianSqliteDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250310080402_DefineConversationParticipants")]
+    partial class DefineConversationParticipants
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.2");

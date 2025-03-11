@@ -6,5 +6,5 @@ public interface IDashboardClient
 {
     Task ReceiveIrcMessage(string message, CancellationToken cancellationToken = default);
     
-    Task ReceiveConversationTurn(ConversationTurn conversationTurn, CancellationToken cancellationToken = default);
+    Task ReceiveConversationTurn(KIlianConversationTurn conversationTurn, CancellationToken cancellationToken = default);
 }

@@ -1,7 +1,12 @@
 @page "/conversations"
+@using Grpc.Core
+@using KIlian.Dashboard.Features.Components.Extensions
 @using KIlian.Generated.Rpc.Conversations
 
 @inject Conversation.ConversationClient ConversationClient
+@inject IDialogService DialogService
+@inject IToastService Toast
+@inject IJSRuntime Js
 
 <PageTitle>Konversationen</PageTitle>
 
@@ -11,26 +16,50 @@
         <div style="display: table; table-layout: fixed; width: 100%;">
             <div style="overflow: auto; height: 400px;">
                 <FluentDataGrid TGridItem="MessageDto" @ref="_messagesGrid" Pagination="_pagination" MultiLine="true" ItemsProvider="GetMessages" GenerateHeader="GenerateHeaderOption.Sticky">
+                    <SelectColumn TGridItem="MessageDto" SelectMode="DataGridSelectMode.Multiple" @bind-SelectedItems="_selectedMessages" />
                     <TemplateColumn Title="Erstellt" Width="200px">
-                        <TimestampColumnContent Timestamp="@context.Created" />
+                        <TimestampColumnContent Timestamp="@context.Created"/>
                     </TemplateColumn>
-                    <PropertyColumn Title="Inhalt" Property="@(m => m.Content)" Style="white-space: preserve;" />
-                    <PropertyColumn Title="Von" Property="@(m => m.From)" Style="min-width: 80px" />
+                    <PropertyColumn Title="Inhalt" Property="@(m => m.Content)" Style="white-space: preserve;"/>
+                    <PropertyColumn Title="Von" Property="@(m => m.From)" Style="min-width: 80px"/>
                 </FluentDataGrid>
             </div>
         </div>
+
+        <CustomFluentPaginator State="_pagination" RefreshDataDelegate="() => _messagesGrid.RefreshAsync()" />
+
+        <FluentButton Disabled="!_selectedMessages.Any()" OnClick="CreateConversation" Style="margin-top: 10px;">Konversation erstellen</FluentButton>
+    </FluentGridItem>
+    
+    <FluentGridItem>
+        <FluentStack Orientation="Orientation.Vertical">
+            <FluentNumberField Label="Anzahl Konversationen" Min="1" @bind-Value="_conversations" />
+            <FluentButton Appearance="Appearance.Accent" OnClick="GenerateTrainingData">Trainingsdaten generieren</FluentButton>
+        </FluentStack>
     </FluentGridItem>
 </FluentGrid>
 
-<FluentPaginator State="_pagination" />
-
-<button @onclick="async () => await RefreshDataGrid(_messagesGrid)">Aktualisieren</button>
+<script>
+    window.downloadTrainingData = async contentStreamReference => {
+        const arrayBuffer = await contentStreamReference.arrayBuffer();
+        const blob = new Blob([arrayBuffer]);
+        const url = URL.createObjectURL(blob);
+        const anchorElement = document.createElement('a');
+        anchorElement.href = url;
+        anchorElement.download = 'training-data.json';
+        anchorElement.click();
+        anchorElement.remove();
+        URL.revokeObjectURL(url);
+    };
+</script>
 
 @code {
     private FluentDataGrid<MessageDto>? _messagesGrid;
     private readonly PaginationState _pagination = new() { ItemsPerPage = 50 };
+    private IEnumerable<MessageDto> _selectedMessages = [];
+    private int? _conversations;
 
-    public async ValueTask<GridItemsProviderResult<MessageDto>> GetMessages(GridItemsProviderRequest<MessageDto> request)
+    private async ValueTask<GridItemsProviderResult<MessageDto>> GetMessages(GridItemsProviderRequest<MessageDto> request)
     {
         var response = await ConversationClient.GetMessagesAsync(new()
         {
@@ -44,11 +73,50 @@
         return GridItemsProviderResult.From<MessageDto>(response.Messages, response.Paginated.TotalItemsCount);
     }
 
-    private async ValueTask RefreshDataGrid<T>(FluentDataGrid<T>? grid)
+    private async Task CreateConversation()
     {
-        if (grid is not null)
+        var messages = _selectedMessages.ToArray();
+        var dialog = await DialogService.ShowDialogAsync<CreateConversationFromMessagesDialog>(messages, new()
         {
-            await grid.RefreshDataAsync();
+            Title = "Konversation erstellen",
+            Width = "50%",
+        });
+
+        var result = await dialog.Result;
+
+        if (result.Cancelled)
+        {
+            return;
         }
+        
+        Toast.ShowSuccess("Konversation erfolgreich erstellt", 2000);
+
+        if (result.Data is true)
+        {
+            await _messagesGrid.RefreshAsync();
+        }
+    }
+
+    private async Task GenerateTrainingData()
+    {
+        var generateTrainingDataDto = new GenerateTrainingDataDto();
+        if (_conversations.HasValue)
+        {
+            generateTrainingDataDto.AmountOfConversations = _conversations.Value;
+        }
+        var response = ConversationClient.GenerateTrainingData(generateTrainingDataDto);
+
+        using var underlyingStream = new MemoryStream();
+        
+        await foreach (var chunk in response.ResponseStream.ReadAllAsync())
+        {
+            chunk.Chunk.WriteTo(underlyingStream);
+        }
+
+        underlyingStream.Position = 0;
+        
+        using var streamRef = new DotNetStreamReference(underlyingStream);
+        
+        await Js.InvokeVoidAsync("downloadTrainingData", streamRef);
     }
 }

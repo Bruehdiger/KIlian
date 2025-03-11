@@ -8,7 +8,6 @@ using KIlian.Features.Irc.Authentication;
 using KIlian.Features.Irc.Messages;
 using KIlian.Features.Ollama;
 using KIlian.Features.Rpc.Conversations;
-using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OllamaSharp;

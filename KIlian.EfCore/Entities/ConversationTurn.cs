@@ -10,7 +10,7 @@ public class ConversationTurn
 
     public string Content { get; set; } = null!;
     
-    public string From { get; set; } = null!;
+    public ConversationParticipant From { get; set; }
 
     public int Order { get; set; }
 }

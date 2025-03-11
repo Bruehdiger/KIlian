@@ -7,5 +7,5 @@ namespace KIlian.Features.Dashboard;
 
 public class DashboardHub : Hub<IDashboardClient>
 {
-    public Task<IEnumerable<ConversationTurn>> GetCurrentConversation(IKIlianChatService chat) => Task.FromResult<IEnumerable<ConversationTurn>>(chat.Conversation);
+    public Task<IEnumerable<KIlianConversationTurn>> GetCurrentConversation(IKIlianChatService chat) => Task.FromResult<IEnumerable<KIlianConversationTurn>>(chat.Conversation);
 }
