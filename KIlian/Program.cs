@@ -71,8 +71,8 @@ await using (var db = await app.Services.GetRequiredService<IDbContextFactory<KI
     {
         await db.AddRangeAsync(Enumerable.Range(0, 100).Select(i => new Message
         {
-            Content = i.ToString(),
-            From = (i % 2).ToString(),
+            Content = Guid.NewGuid().ToString(),
+            From = Guid.NewGuid().ToString(),
             Created = DateTimeOffset.Now,
         }));
         await db.SaveChangesAsync();

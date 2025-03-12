@@ -1,7 +1,6 @@
 using System.Buffers;
-using System.Collections.Concurrent;
+using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
@@ -87,41 +86,79 @@ public class ConversationService(IDbContextFactory<KIlianSqliteDbContext> dbFact
         
         if (request.HasAmountOfConversations)
         {
+            // ReSharper disable once EntityFramework.ClientSideDbFunctionCall
+            // ReSharper disable once AccessToDisposedClosure
             turns = turns.Where(turn => db.Set<KIlian.EfCore.Entities.Conversation>().OrderBy(_ => EF.Functions.Random()).Take(request.AmountOfConversations).Select(c => c.Id).Contains(turn.ConversationId));
         }
         
-        var buffer = new ArrayBufferWriter<byte>();
-        await using var writer = new Utf8JsonWriter(buffer);
+        await using var stream = new GrpcResponseStream(responseStream);
+        await using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
         writer.WriteStartObject();
         writer.WritePropertyName("conversations");
         writer.WriteStartArray();
         
-        var serializerOptions = new JsonSerializerOptions
-        {
-            Converters = { new JsonStringEnumConverter() }
-        };
-        
         foreach (var conversationTurns in turns.GroupBy(turn => turn.ConversationId).AsSingleQuery())
         {
-            writer.WriteRawValue(JsonSerializer.Serialize(conversationTurns.Select(turn => new
+            writer.WriteStartArray();
+            foreach (var turn in conversationTurns)
             {
-                from = turn.From,
-                content = turn.Content,
-            }).ToArray(), serializerOptions));
-
-            if (buffer.WrittenCount <= 0)
-            {
-                continue;
+                writer.WriteStartObject();
+                writer.WritePropertyName("role");
+                writer.WriteStringValue(turn.From.ToString().ToLowerInvariant());
+                
+                writer.WritePropertyName("content");
+                writer.WriteStringValue(turn.Content);
+                writer.WriteEndObject();
             }
-
-            await responseStream.WriteAsync(new() { Chunk = ByteString.CopyFrom(buffer.WrittenSpan) }, context.CancellationToken);
-            buffer.Clear();
+            writer.WriteEndArray();
         }
         
         writer.WriteEndArray();
         writer.WriteEndObject();
-        
-        await writer.FlushAsync(context.CancellationToken);
-        await responseStream.WriteAsync(new() { Chunk = ByteString.CopyFrom(buffer.WrittenSpan) }, context.CancellationToken);
     }
+}
+
+public class GrpcResponseStream(IServerStreamWriter<TrainingDataDto> writer) : Stream
+{
+    private ArrayBufferWriter<byte> _buffer = new();
+    
+    public override void Flush()
+    {
+        throw new NotSupportedException();
+    }
+
+    public override async Task FlushAsync(CancellationToken cancellationToken)
+    {
+        await writer.WriteAsync(new()
+        {
+            Chunk = ByteString.CopyFrom(_buffer.WrittenSpan)
+        }, cancellationToken);
+        _buffer = new();
+    }
+
+    public override int Read(byte[] buffer, int offset, int count)
+    {
+        throw new NotSupportedException();
+    }
+
+    public override long Seek(long offset, SeekOrigin origin)
+    {
+        throw new NotSupportedException();
+    }
+
+    public override void SetLength(long value)
+    {
+        throw new NotSupportedException();
+    }
+
+    public override void Write(byte[] buffer, int offset, int count)
+    {
+        _buffer.Write(buffer.AsSpan(offset, count));
+    }
+
+    public override bool CanRead => false;
+    public override bool CanSeek => false;
+    public override bool CanWrite => true;
+    public override long Length => -1;
+    public override long Position { get; set; }
 }
