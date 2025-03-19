@@ -8,39 +8,90 @@
 @inject IToastService Toast
 @inject IJSRuntime Js
 
+<style>
+    .fluent-sortable-list.sortable-conversation-turns .sortable-item {
+        height: auto !important;
+        display: block;
+        padding: 5px;
+    }
+    
+    .fluent-splitter > div:first-child {
+        padding: 10px 10px 10px 0;
+    }
+
+    .fluent-splitter > div:last-child {
+        padding: 10px 0 10px 10px;
+    }
+</style>
+
 <PageTitle>Konversationen</PageTitle>
 
-<FluentGrid Spacing="5">
-    <FluentGridItem md="12">
-        <h4>Rohe Nachrichten</h4>
-        <div style="display: table; table-layout: fixed; width: 100%;">
-            <div style="overflow: auto; height: 400px;">
-                <FluentDataGrid TGridItem="MessageDto" @ref="_messagesGrid" Pagination="_pagination" MultiLine="true" ItemsProvider="GetMessages" GenerateHeader="GenerateHeaderOption.Sticky">
-                    <SelectColumn TGridItem="MessageDto" SelectMode="DataGridSelectMode.Multiple" @bind-SelectedItems="_selectedMessages" />
-                    <TemplateColumn Title="Erstellt" Width="200px">
-                        <TimestampColumnContent Timestamp="@context.Created"/>
-                    </TemplateColumn>
-                    <PropertyColumn Title="Inhalt" Property="@(m => m.Content)" Style="white-space: preserve;"/>
-                    <PropertyColumn Title="Von" Property="@(m => m.From)" Style="min-width: 80px"/>
-                </FluentDataGrid>
+<FluentSplitter Panel1MinSize="50%" Panel1Size="70%" Panel2MinSize="20%">
+    <Panel1>
+        <FluentStack Orientation="Orientation.Vertical" VerticalGap="30">
+            <div>
+                <h4>Rohe Nachrichten</h4>
+                <div style="display: table; table-layout: fixed; width: 100%;">
+                    <div style="overflow: auto; height: 400px;">
+                        <FluentDataGrid TGridItem="MessageDto" @ref="_messagesGrid" Pagination="_pagination" MultiLine="true" ItemsProvider="GetMessages" GenerateHeader="GenerateHeaderOption.Sticky">
+                            <SelectColumn TGridItem="MessageDto" SelectMode="DataGridSelectMode.Multiple" @bind-SelectedItems="_selectedMessages" />
+                            <TemplateColumn Title="Erstellt" Width="200px">
+                                <TimestampColumnContent Timestamp="@context.Created"/>
+                            </TemplateColumn>
+                            <PropertyColumn Title="Inhalt" Property="@(m => m.Content)" Style="white-space: preserve;" />
+                            <PropertyColumn Title="Von" Property="@(m => m.From)" Style="min-width: 80px" />
+                        </FluentDataGrid>
+                    </div>
+                </div>
+
+                <CustomFluentPaginator State="_pagination" RefreshDataDelegate="() => _messagesGrid.RefreshAsync()" />
+
+                <FluentStack Style="justify-content: space-between; margin-top: 10px">
+                    <FluentButton Disabled="!_selectedMessages.Any()" OnClick="DeleteMessages">Ausgewählte Nachrichten Löschen</FluentButton>
+                    <FluentMenuButton Appearance="Appearance.Accent" Text="Konversation">
+                        <FluentMenuItem OnClick="() => SelectedMessagesToConversationTurns(overwrite: true)">Neue Konversation</FluentMenuItem>
+                        <FluentMenuItem OnClick="() => SelectedMessagesToConversationTurns(overwrite: false)">Zu Konversation hinzufügen</FluentMenuItem>
+                    </FluentMenuButton>
+                </FluentStack>
             </div>
-        </div>
 
-        <CustomFluentPaginator State="_pagination" RefreshDataDelegate="() => _messagesGrid.RefreshAsync()" />
-
-        <FluentStack Style="justify-content: space-between; margin-top: 10px">
-            <FluentButton Disabled="!_selectedMessages.Any()" OnClick="DeleteMessages">Löschen</FluentButton>
-            <FluentButton Disabled="!_selectedMessages.Any()" OnClick="CreateConversation" Appearance="Appearance.Accent">Konversation erstellen</FluentButton>
+            <hr/>
+            
+            <div>
+                <h4>Trainingsdaten</h4>
+                <FluentStack Orientation="Orientation.Vertical">
+                    <FluentNumberField Label="Anzahl Konversationen" Min="1" @bind-Value="_conversations"/>
+                    <FluentButton Appearance="Appearance.Accent" OnClick="GenerateTrainingData">Trainingsdaten generieren</FluentButton>
+                </FluentStack>
+            </div>
         </FluentStack>
-    </FluentGridItem>
+    </Panel1>
     
-    <FluentGridItem>
-        <FluentStack Orientation="Orientation.Vertical">
-            <FluentNumberField Label="Anzahl Konversationen" Min="1" @bind-Value="_conversations" />
-            <FluentButton Appearance="Appearance.Accent" OnClick="GenerateTrainingData">Trainingsdaten generieren</FluentButton>
+    <Panel2>
+        <h4>Konversation erstellen</h4>
+        <FluentSortableList TItem="CreateConversationTurnDto" Items="_conversationTurns" OnUpdate="OnUpdateConversationTurnsOrder" Context="turn" Class="sortable-conversation-turns" Style="width: 100%">
+            <ItemTemplate>
+                @{
+                    var label = _conversationTurns.IndexOf(turn) % 2 == 0 ? "User:" : "Assistant:";
+                }
+
+                <FluentTextArea Label="@label" @bind-Value="@turn.Content" Style="width: 100%" Resize="TextAreaResize.Vertical" Rows="5" />
+                <div Style="margin-top: 5px; display: flex; justify-content: flex-end">
+                    <FluentIcon Value="@(new Icons.Regular.Size20.Delete())" OnClick="() => RemoveTurn(turn)" />
+                </div>
+            </ItemTemplate>
+        </FluentSortableList>
+
+        <FluentStack Orientation="Orientation.Vertical" Style="margin-top: 10px; justify-content: end">
+            <FluentButton OnClick="AddTurn" Style="align-self: end">Hinzufügen</FluentButton>
+            
+            <FluentStack Style="justify-content: space-between;">
+                <FluentButton OnClick="ResetConversationTurns">Zurücksetzen</FluentButton>
+                <FluentButton OnClick="CreateConversationAsync" Disabled="!CanCreateConversation()" Appearance="Appearance.Accent">Anlegen</FluentButton>
+            </FluentStack>
         </FluentStack>
-    </FluentGridItem>
-</FluentGrid>
+    </Panel2>
+</FluentSplitter>
 
 <script>
     window.downloadTrainingData = async contentStreamReference => {
@@ -60,6 +111,7 @@
     private FluentDataGrid<MessageDto>? _messagesGrid;
     private readonly PaginationState _pagination = new() { ItemsPerPage = 50 };
     private IEnumerable<MessageDto> _selectedMessages = [];
+    private readonly List<CreateConversationTurnDto> _conversationTurns = [];
     private int? _conversations;
 
     private async ValueTask<GridItemsProviderResult<MessageDto>> GetMessages(GridItemsProviderRequest<MessageDto> request)
@@ -76,30 +128,84 @@
         return GridItemsProviderResult.From<MessageDto>(response.Messages, response.Paginated.TotalItemsCount);
     }
 
-    private async Task CreateConversation()
+    private void ResetConversationTurns() => _conversationTurns.Clear();
+
+    private void SelectedMessagesToConversationTurns(bool overwrite)
     {
-        var messages = _selectedMessages.ToArray();
-        var dialog = await DialogService.ShowDialogAsync<CreateConversationFromMessagesDialog>(messages, new()
+        var turns = _selectedMessages.OrderBy(message => message.Created).Select((message, index) => new CreateConversationTurnDto
         {
-            Title = "Konversation erstellen",
-            Width = "50%",
+            Content = message.Content,
+            Order = index
         });
 
-        var result = await dialog.Result;
-
-        if (result.Cancelled)
+        if (overwrite)
+        {
+            ResetConversationTurns();
+        }
+        
+        _conversationTurns.AddRange(turns);
+    }
+    
+    private void OnUpdateConversationTurnsOrder(FluentSortableListEventArgs args)
+    {
+        if (args.OldIndex == args.NewIndex)
         {
             return;
         }
-        
-        Toast.ShowSuccess("Konversation erfolgreich erstellt", 2000);
-        
-        _selectedMessages = [];
 
-        if (result.Data is true)
+        var turn = _conversationTurns[args.OldIndex];
+        _conversationTurns.RemoveAt(args.OldIndex);
+
+        if (args.NewIndex < _conversationTurns.Count)
         {
-            await _messagesGrid.RefreshAsync();
+            _conversationTurns.Insert(args.NewIndex, turn);
         }
+        else
+        {
+            _conversationTurns.Add(turn);
+        }
+        
+        UpdateOrder(Math.Min(args.OldIndex, args.NewIndex));
+    }
+
+    private void UpdateOrder(int startIndex = 0)
+    {
+        for (var i = startIndex; i < _conversationTurns.Count; i++)
+        {
+            _conversationTurns[i].Order = i;
+        }
+    }
+
+    private void RemoveTurn(CreateConversationTurnDto turn)
+    {
+        var index = _conversationTurns.IndexOf(turn);
+
+        if (index <= -1)
+        {
+            return;
+        }
+
+        _conversationTurns.Remove(turn);
+        UpdateOrder(index);
+    }
+
+    private void AddTurn() => _conversationTurns.Add(new() { Order = _conversationTurns.Count });
+
+    private bool CanCreateConversation() => _conversationTurns.Count >= 2 && !_conversationTurns.Any(turn => string.IsNullOrWhiteSpace(turn.Content));
+    
+    private async Task CreateConversationAsync()
+    {
+        if (!CanCreateConversation())
+        {
+            return;
+        }
+
+        await ConversationClient.CreateConversationFromTurnsAsync(new()
+        {
+            Turns = { _conversationTurns }
+        });
+
+        Toast.ShowSuccess("Konversation erfolgreich angelegt", 5000);
     }
 
     private async Task GenerateTrainingData()
