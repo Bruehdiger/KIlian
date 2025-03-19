@@ -12,4 +12,6 @@ public class OllamaOptions
     public int MaxConcurrentRequests { get; set; }
 
     public int MaxConcurrencyMillisecondsTimeout { get; set; } = -1;
+
+    public RequestParameters? RequestParameters { get; set; }
 }

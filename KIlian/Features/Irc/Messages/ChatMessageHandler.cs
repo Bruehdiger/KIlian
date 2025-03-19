@@ -5,6 +5,7 @@ using KIlian.Features.Irc.Extensions;
 using KIlian.Features.Ollama;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using OllamaSharp.Models;
 
 namespace KIlian.Features.Irc.Messages;
 
@@ -13,7 +14,8 @@ public class ChatMessageHandler(
     IIrcClient ircClient,
     IDbContextFactory<KIlianSqliteDbContext> dbFactory,
     IIrcMessageHoster hoster,
-    IOptions<IrcOptions> ircOptions) : IIrcMessageHandler
+    IOptions<IrcOptions> ircOptions,
+    IOptionsMonitor<OllamaOptions> ollamaOptions) : IIrcMessageHandler
 {
     private readonly IrcOptions _ircOptions = ircOptions.Value;
     
@@ -85,8 +87,22 @@ public class ChatMessageHandler(
             var success = false;
             try
             {
+                var request = new KIlianChatRequest(input);
+                if (ollamaOptions.CurrentValue.RequestParameters is not null)
+                {
+                    var parameters = ollamaOptions.CurrentValue.RequestParameters;
+                    request.Options = new RequestOptions
+                    {
+                        Temperature = parameters.Temperature,
+                        TopK = parameters.TopK,
+                        RepeatPenalty = parameters.RepeatPenalty,
+                        TopP = parameters.TopP,
+                        RepeatLastN = parameters.RepeatLastN,
+                    };
+                }
+                
                 //if the model is not running at this time, the first generate request will cause ollama to run it
-                response = await chat.ChatAsync(new KIlianChatRequest(input), cancellationToken);
+                response = await chat.ChatAsync(request, cancellationToken);
                 success = true;
             }
             catch (TimeoutException)
