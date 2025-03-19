@@ -100,9 +100,10 @@ public class KIlianChatService(IOllamaApiClient ollama, IOptions<OllamaOptions> 
 
             var end = DateTimeOffset.Now;
             var responseMessage = messageBuilder.ToMessage();
-            requestCompletionSource.SetResult(responseMessage.Content);
+            var responseContent = responseMessage.Content?.Trim();
+            requestCompletionSource.SetResult(responseContent);
 
-            if (!string.IsNullOrEmpty(responseMessage.Content))
+            if (!string.IsNullOrEmpty(responseContent))
             {
                 lock (_conversation)
                 {
@@ -110,7 +111,7 @@ public class KIlianChatService(IOllamaApiClient ollama, IOptions<OllamaOptions> 
                     _conversation.RemoveRange(0,
                         Math.Max(0, _conversation.Count - _ollamaOptions.MaxConversationTurns));
                     _ = dashboard.Clients.All.ReceiveConversationTurn(
-                        new(start, message.Content!, end, responseMessage.Content), cancellationToken);
+                        new(start, message.Content!, end, responseContent), cancellationToken);
                 }
             }
         }
