@@ -70,7 +70,7 @@
         return ValueTask.FromResult(GridItemsProviderResult.From(request.ApplySorting(requestedItems.AsQueryable()).ToArray(), items.Length));
     };
 
-    protected override Task OnInitializedAsync()
+    protected override Task OnParametersSetAsync()
     {
         _connection = new HubConnectionBuilder()
             .WithUrl($"{Configuration.GetRequiredValue("KIlian:Endpoints:Http1")}/dashboard")

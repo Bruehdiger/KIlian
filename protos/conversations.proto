@@ -13,10 +13,12 @@ service Conversation {
   rpc DeleteMessages (DeleteMessagesDto) returns (google.protobuf.Empty);
   rpc CreateConversationFromTurns(CreateConversationFromTurnsDto) returns (ConversationDto);
   rpc GenerateTrainingData(GenerateTrainingDataDto) returns (stream TrainingDataDto);
+  rpc GetConversations(GetOffsetPaginatedConversationsDto) returns (OffsetPaginatedConversationsDto);
+  rpc DeleteConversations (DeleteConversationsDto) returns (google.protobuf.Empty);
 }
 
 message GetOffsetPaginatedMessagesDto {
-  pagination.OffsetBasedPagination Pagination = 1;
+  pagination.OffsetBasedPagination pagination = 1;
 }
 
 message OffsetPaginatedMessagesDto {
@@ -61,10 +63,23 @@ message ConversationDto {
   repeated ConversationTurnDto turns = 2;
 }
 
+message GetOffsetPaginatedConversationsDto {
+  pagination.OffsetBasedPagination pagination = 1;
+}
+
+message OffsetPaginatedConversationsDto {
+  pagination.Paginated paginated = 1;
+  repeated ConversationDto conversations = 2;
+}
+
 message GenerateTrainingDataDto {
-  optional int32 AmountOfConversations = 1;
+  optional int32 amount_of_conversations = 1;
 }
 
 message TrainingDataDto {
   bytes chunk = 1;
+}
+
+message DeleteConversationsDto {
+  repeated int64 conversation_ids = 1;
 }

@@ -33,7 +33,7 @@
                 <h4>Rohe Nachrichten</h4>
                 <div style="display: table; table-layout: fixed; width: 100%;">
                     <div style="overflow: auto; height: 400px;">
-                        <FluentDataGrid TGridItem="MessageDto" @ref="_messagesGrid" Pagination="_pagination" MultiLine="true" ItemsProvider="GetMessages" GenerateHeader="GenerateHeaderOption.Sticky">
+                        <FluentDataGrid TGridItem="MessageDto" @ref="_messagesGrid" Pagination="_messagesPagination" MultiLine="true" ItemsProvider="GetMessages" GenerateHeader="GenerateHeaderOption.Sticky">
                             <SelectColumn TGridItem="MessageDto" SelectMode="DataGridSelectMode.Multiple" @bind-SelectedItems="_selectedMessages" />
                             <TemplateColumn Title="Erstellt" Width="200px">
                                 <TimestampColumnContent Timestamp="@context.Created"/>
@@ -44,13 +44,42 @@
                     </div>
                 </div>
 
-                <CustomFluentPaginator State="_pagination" RefreshDataDelegate="() => _messagesGrid.RefreshAsync()" />
+                <CustomFluentPaginator State="_messagesPagination" RefreshDataDelegate="() => _messagesGrid.RefreshAsync()" />
 
                 <FluentStack Style="justify-content: space-between; margin-top: 10px">
                     <FluentButton Disabled="!_selectedMessages.Any()" OnClick="DeleteMessages">Ausgewählte Nachrichten Löschen</FluentButton>
                     <FluentMenuButton Appearance="Appearance.Accent" Text="Konversation">
                         <FluentMenuItem OnClick="() => SelectedMessagesToConversationTurns(overwrite: true)">Neue Konversation</FluentMenuItem>
                         <FluentMenuItem OnClick="() => SelectedMessagesToConversationTurns(overwrite: false)">Zu Konversation hinzufügen</FluentMenuItem>
+                    </FluentMenuButton>
+                </FluentStack>
+            </div>
+
+            <hr/>
+
+            <div>
+                <h4>Konversationen</h4>
+                <div style="display: table; table-layout: fixed; width: 100%;">
+                    <div style="overflow: auto; height: 400px;">
+                        <FluentDataGrid TGridItem="ConversationDto" @ref="_conversationsGrid" Pagination="_conversationsPagination" ItemsProvider="GetConversations" GenerateHeader="GenerateHeaderOption.Sticky">
+                            <SelectColumn TGridItem="ConversationDto" SelectMode="DataGridSelectMode.Multiple" @bind-SelectedItems="_selectedConversations" />
+                            <TemplateColumn Title="Anzahl">
+                                @context.Turns.Count
+                            </TemplateColumn>
+                            <TemplateColumn Title="Inhalt" Tooltip="true" TooltipText="@(convo => string.Join("\n", convo.Turns.OrderBy(t => t.Order).Select(t => $"{t.From}: {t.Content}")))">
+                                @context.Turns.FirstOrDefault()?.Content
+                            </TemplateColumn>
+                        </FluentDataGrid>
+                    </div>
+                </div>
+
+                <CustomFluentPaginator State="_conversationsPagination" RefreshDataDelegate="() => _conversationsGrid.RefreshAsync()" />
+
+                <FluentStack Style="justify-content: space-between; margin-top: 10px">
+                    <FluentButton Disabled="!_selectedConversations.Any()" OnClick="DeleteConversations">Ausgewählte Konversationen Löschen</FluentButton>
+                    <FluentMenuButton Appearance="Appearance.Accent" Text="Konversation">
+                        <FluentMenuItem OnClick="() => LoadConversations(overwrite: true)">Neue Konversation</FluentMenuItem>
+                        <FluentMenuItem OnClick="() => LoadConversations(overwrite: false)">Zu Konversation hinzufügen</FluentMenuItem>
                     </FluentMenuButton>
                 </FluentStack>
             </div>
@@ -109,8 +138,11 @@
 
 @code {
     private FluentDataGrid<MessageDto>? _messagesGrid;
-    private readonly PaginationState _pagination = new() { ItemsPerPage = 50 };
+    private FluentDataGrid<ConversationDto>? _conversationsGrid;
+    private readonly PaginationState _messagesPagination = new() { ItemsPerPage = 50 };
+    private readonly PaginationState _conversationsPagination = new() { ItemsPerPage = 50 };
     private IEnumerable<MessageDto> _selectedMessages = [];
+    private IEnumerable<ConversationDto> _selectedConversations = [];
     private readonly List<CreateConversationTurnDto> _conversationTurns = [];
     private int? _conversations;
 
@@ -127,12 +159,44 @@
         
         return GridItemsProviderResult.From<MessageDto>(response.Messages, response.Paginated.TotalItemsCount);
     }
+    
+    private async ValueTask<GridItemsProviderResult<ConversationDto>> GetConversations(GridItemsProviderRequest<ConversationDto> request)
+    {
+        var response = await ConversationClient.GetConversationsAsync(new()
+        {
+            Pagination = new()
+            {
+                Count = request.Count ?? 50,
+                Offset = request.StartIndex
+            }
+        });
+        
+        return GridItemsProviderResult.From<ConversationDto>(response.Conversations, response.Paginated.TotalItemsCount);
+    }
 
     private void ResetConversationTurns() => _conversationTurns.Clear();
 
+    private void LoadConversations(bool overwrite)
+    {
+        if (overwrite)
+        {
+            ResetConversationTurns();
+        }
+        
+        _conversationTurns.AddRange(_selectedConversations
+            .OrderBy(convo => convo.Id)
+            .SelectMany(convo => convo.Turns.OrderBy(turn => turn.Order))
+            .Select(turn => new CreateConversationTurnDto
+            {
+                Content = turn.Content
+            }));
+        
+        UpdateOrder();
+    }
+
     private void SelectedMessagesToConversationTurns(bool overwrite)
     {
-        var turns = _selectedMessages.OrderBy(message => message.Created).Select((message, index) => new CreateConversationTurnDto
+        var turns = _selectedMessages.OrderBy(message => message.Created).ThenBy(message => message.Id).Select((message, index) => new CreateConversationTurnDto
         {
             Content = message.Content,
             Order = index
@@ -144,6 +208,8 @@
         }
         
         _conversationTurns.AddRange(turns);
+
+        UpdateOrder();
     }
     
     private void OnUpdateConversationTurnsOrder(FluentSortableListEventArgs args)
@@ -206,6 +272,8 @@
         });
 
         Toast.ShowSuccess("Konversation erfolgreich angelegt", 5000);
+        
+        await _conversationsGrid.RefreshAsync();
     }
 
     private async Task GenerateTrainingData()
@@ -252,5 +320,28 @@
         _selectedMessages = [];
 
         await _messagesGrid.RefreshAsync();
+    }
+    
+    private async Task DeleteConversations()
+    {
+        var dialog = await DialogService.ShowConfirmationAsync("Konversationen wirklich löschen?", "Ja", "Nein", "Bestätigen");
+        var result = await dialog.Result;
+
+        if (result.Cancelled)
+        {
+            return;
+        }
+        
+        await ConversationClient.DeleteConversationsAsync(new()
+        {
+            ConversationIds =
+            {
+                _selectedConversations.Select(message => message.Id)
+            }
+        });
+
+        _selectedConversations = [];
+
+        await _conversationsGrid.RefreshAsync();
     }
 }

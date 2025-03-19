@@ -8,6 +8,7 @@ using KIlian.Features.Rpc.Pagination.Extensions;
 using KIlian.Generated.Rpc.Conversations;
 using Microsoft.EntityFrameworkCore;
 using Conversation = KIlian.Generated.Rpc.Conversations.Conversation;
+using KIlianConversation = KIlian.EfCore.Entities.Conversation;
 
 namespace KIlian.Features.Rpc.Conversations;
 
@@ -47,7 +48,7 @@ public class ConversationService(IDbContextFactory<KIlianSqliteDbContext> dbFact
     {
         await using var db = await dbFactory.CreateDbContextAsync(context.CancellationToken);
         
-        var conversationEntry = await db.AddAsync(new KIlian.EfCore.Entities.Conversation
+        var conversationEntry = await db.AddAsync(new KIlianConversation
         {
             Turns = request.Turns.OrderBy(turn => turn.Order).Select((turn, index) => new ConversationTurn
             {
@@ -86,7 +87,7 @@ public class ConversationService(IDbContextFactory<KIlianSqliteDbContext> dbFact
         {
             // ReSharper disable once EntityFramework.ClientSideDbFunctionCall
             // ReSharper disable once AccessToDisposedClosure
-            turns = turns.Where(turn => db.Set<KIlian.EfCore.Entities.Conversation>().OrderBy(_ => EF.Functions.Random()).Take(request.AmountOfConversations).Select(c => c.Id).Contains(turn.ConversationId));
+            turns = turns.Where(turn => db.Set<KIlianConversation>().OrderBy(_ => EF.Functions.Random()).Take(request.AmountOfConversations).Select(c => c.Id).Contains(turn.ConversationId));
         }
         
         await using var stream = new GrpcResponseStream(responseStream);
@@ -113,5 +114,52 @@ public class ConversationService(IDbContextFactory<KIlianSqliteDbContext> dbFact
         
         writer.WriteEndArray();
         writer.WriteEndObject();
+    }
+
+    public override async Task<OffsetPaginatedConversationsDto> GetConversations(GetOffsetPaginatedConversationsDto request, ServerCallContext context)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(context.CancellationToken);
+        
+        var count = await db.Set<KIlianConversation>().CountAsync(context.CancellationToken);
+
+        var conversations = await db.Set<KIlianConversation>()
+            .Skip(request.Pagination.Offset)
+            .Take(request.Pagination.Count)
+            .Include(c => c.Turns)
+            .OrderBy(c => c.Id)
+            .AsSingleQuery()
+            .ToArrayAsync(context.CancellationToken);
+
+        return new OffsetPaginatedConversationsDto
+        {
+            Paginated = new()
+            {
+                TotalItemsCount = count
+            },
+            Conversations =
+            {
+                conversations.Select(c => new ConversationDto
+                {
+                    Id = c.Id,
+                    Turns =
+                    {
+                        c.Turns.Select(turn => new ConversationTurnDto
+                        {
+                            Id = turn.Id,
+                            Content = turn.Content,
+                            From = (ConversationParticipantDto)turn.From,
+                            Order = turn.Order,
+                        })
+                    }
+                })
+            }
+        };
+    }
+
+    public override async Task<Empty> DeleteConversations(DeleteConversationsDto request, ServerCallContext context)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(context.CancellationToken);
+        db.RemoveRange(db.Set<KIlianConversation>().Where(convo => request.ConversationIds.Contains(convo.Id)));
+        return new();
     }
 }
